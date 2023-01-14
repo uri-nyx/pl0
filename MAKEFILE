@@ -1,0 +1,8 @@
+PC := fpc
+SRC := src/
+BUILD := build/
+OBJ := build/obj/
+
+run: 
+	$(PC) $(SRC)cradle -o $(BUILD)cradle
+	./$(BUILD)cradle
