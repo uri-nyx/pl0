@@ -1,26 +1,22 @@
-
+{--------------------------------------------------------------}
 program Cradle;
 
-
+{--------------------------------------------------------------}
 { Constant Declarations }
 
 const TAB = ^I;
-const CR = ^J; {LN is the way}
+const CR = ^M;
 const A = 'a0';
 const B = 'a1';
 const AR = 't1';
 const SP = 'sp'; { TODO: maybe leave stack pointer to system stacks}
 
-const TOKEN_CONST = 'const';
-
-const BANK = '#bankdef var\n{\n#addr 0x2000\n#size 0x1000\n#outp 8 * 0x2000\n}';
-
-
+{--------------------------------------------------------------}
 { Variable Declarations }
 
 var Look: char;              { Lookahead Character }
                               
-
+{--------------------------------------------------------------}
 { Read New Character From Input Stream }
 
 procedure GetChar;
@@ -28,7 +24,7 @@ begin
    Read(Look);
 end;
 
-
+{--------------------------------------------------------------}
 { Report an Error }
 
 procedure Error(s: string);
@@ -38,7 +34,7 @@ begin
 end;
 
 
-
+{--------------------------------------------------------------}
 { Report Error and Halt }
 
 procedure Abort(s: string);
@@ -48,7 +44,7 @@ begin
 end;
 
 
-
+{--------------------------------------------------------------}
 { Report What Was Expected }
 
 procedure Expected(s: string);
@@ -56,7 +52,17 @@ begin
    Abort(s + ' Expected');
 end;
 
+{--------------------------------------------------------------}
+{ Match a Specific Input Character }
 
+procedure Match(x: char);
+begin
+   if Look = x then GetChar
+   else Expected('''' + x + '''');
+end;
+
+
+{--------------------------------------------------------------}
 { Recognize an Alpha Character }
 
 function IsAlpha(c: char): boolean;
@@ -65,7 +71,7 @@ begin
 end;
                               
 
-
+{--------------------------------------------------------------}
 
 { Recognize a Decimal Digit }
 
@@ -75,94 +81,29 @@ begin
 end;
 
 
-{ Recognize an Alphanumeric }
-
-function IsAlNum(c: char): boolean;
-begin
-   IsAlNum := IsAlpha(c) or IsDigit(c);
-end;
-
-
-{ Recognize White Space }
-
-function IsWhite(c: char): boolean;
-begin
-   IsWhite := c in [' ', TAB];
-end;
-
-
-{ Skip Over Leading White Space }
-
-procedure SkipWhite;
-begin
-   while IsWhite(Look) do
-      GetChar;
-end;
-
-
-{ Match a Specific Input Character }
-
-procedure Match(x: char);
-begin
-   if Look <> x then Expected('''' + x + '''')
-   else begin
-      GetChar;
-      SkipWhite;
-   end;
-end;
-
-procedure MatchString(s: string);
-var Len: integer;
-var i: integer;
-begin
-   Len := length(s);
-
-   for i := 0 to Len do
-      if Look <> s[i] then Expected('''' + s + '''')
-      else begin
-         GetChar;
-         SkipWhite;
-      end;
-end;
-
-
-
+{--------------------------------------------------------------}
 { Get an Identifier }
 
-function GetName: string;
-var Token: string;
+function GetName: char;
 begin
-   Token := '';
    if not IsAlpha(Look) then Expected('Name');
-   while IsAlnum(Look) do begin
-      Token := Token + Look;
-      GetChar;
-   end;
-   GetName := Token;
-   SkipWhite;
+   GetName := UpCase(Look);
+   GetChar;
 end;
 
 
-
+{--------------------------------------------------------------}
 { Get a Number }
 
-function GetNum: string;
-var Value: string;
+function GetNum: char;
 begin
-   Value := '';
    if not IsDigit(Look) then Expected('Integer');
-   while IsDigit(Look) do begin
-      Value := Value + Look;
-      GetChar;
-   end;
-   GetNum := Value;
-   SkipWhite;
+   GetNum := Look;
+   GetChar;
 end;
 
 
-
-
-
+{--------------------------------------------------------------}
 { Output a String with Tab }
 
 procedure Emit(s: string);
@@ -173,7 +114,7 @@ end;
 
 
 
-
+{--------------------------------------------------------------}
 { Output a String with Tab and CRLF }
 
 procedure EmitLn(s: string);
@@ -182,16 +123,15 @@ begin
    WriteLn;
 end;
 
-
+{--------------------------------------------------------------}
 { Initialize }
 
 procedure Init;
 begin
    GetChar;
-   SkipWhite;
 end;
 
-
+{---------------------------------------------------------------}
 { Pop  to register }
 
 procedure Pop(reg: string);
@@ -199,7 +139,7 @@ begin
    EmitLn('pop ' + reg + ', ' + SP);
 end;
 
-
+{---------------------------------------------------------------}
 { Push register }
 
 procedure Push(reg: string);
@@ -208,20 +148,20 @@ begin
 end;
 
 
-
+{--------------------------------------------------------------}
 { Recognize an Addop }
 
 function IsAddop(c: char): boolean;
 begin
    IsAddop := c in ['+', '-'];
 end;
+{--------------------------------------------------------------}
 
-
-
+{---------------------------------------------------------------}
 { Parse and Translate an Identifier }
 
 procedure Ident;
-var Name: string;
+var Name: char;
 begin
    Name := GetName;
    if Look = '(' then begin
@@ -234,7 +174,7 @@ begin
       EmitLn('llw ' + A + ', ' + Name) { TODO: maybe prepend label with 'var_' and make it case sensitive}
 end;
 
-
+{---------------------------------------------------------------}
 { Parse and Translate a Math Factor }
 
 procedure Expression; Forward;
@@ -251,7 +191,7 @@ begin
       EmitLn('li ' + A + ', ' + GetNum);
 end;
 
-
+{--------------------------------------------------------------}
 { Recognize and Translate a Multiply }
 
 procedure Multiply;
@@ -273,7 +213,7 @@ begin
    EmitLn('idiv ' + A + ', ' + 'zero, ' + B + ', ' + A);
 end;
 
-
+{---------------------------------------------------------------}
 { Parse and Translate a Math Term }
 
 procedure Term;
@@ -288,7 +228,7 @@ begin
    end;
 end;
 
-
+{--------------------------------------------------------------}
 { Recognize and Translate an Add }
 
 procedure Add;
@@ -312,18 +252,18 @@ begin
 end;
 {-------------------------------------------------------------}
 
-
+{--------------------------------------------------------------}
 { Parse and Translate an Assignment Statement }
 
 procedure Assignment;
-var Name: string;
+var Name: char;
 begin
    Name := GetName;
    Match('=');
    Expression;
    EmitLn('ssw ' + A + ', ' + Name + ', ' + AR)
 end;
-
+{--------------------------------------------------------------}
 
 procedure Expression;
 begin
@@ -338,69 +278,17 @@ begin
          '-': Subtract;
       end;
    end;
-end;
+end; 
+{---------------------------------------------------------------}
 
 
 
-procedure Constant;
-var Name: string;
-var Value: string;
-begin
-   Name := GetName;
-   Match('=');
-   Value := GetNum;
-   EmitLn(Name + ' = ' + Value);
-
-   if Look = ',' then begin
-      Match(',');
-      while Look <> ';' do
-         Constant;
-      end
-   else if Look = ';' then
-      Match(';');
-end;
-
-
-procedure Variable;
-var Name: string;
-begin
-   Name := GetName;
-   EmitLn('#bank var');
-   EmitLn(Name + ': ');
-   EmitLn('#res 4');
-
-   if Look = ',' then begin
-      Match(',');
-      while Look <> ';' do
-         Variable;
-      end
-   else if Look = ';' then
-      Match(';');
-end;
-
-procedure Proc;
-begin
-   
-end;
-
-procedure Block;
-var Keyword: string;
-begin
-   Keyword := GetName;
-   if Keyword = 'const' then
-      Constant
-   else if Keyword = 'var' then
-      Variable
-   else if Keyword = 'procedure' then
-      Proc
-   else
-      Expected('Block');
-end;
-
+{--------------------------------------------------------------}
 { Main Program }
 
 begin
    Init;
-   Block;
+   Assignment;
    if Look <> CR then Expected('Newline');
 end.
+{--------------------------------------------------------------}
