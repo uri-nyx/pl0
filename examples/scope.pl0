@@ -1,0 +1,17 @@
+// Test local scoping
+
+var x;
+procedure a;
+var x;
+begin
+    x := 2;
+    ! x
+end;
+
+procedure main;
+begin
+    x := 10;
+    call a;
+    ! x
+end;
+.
