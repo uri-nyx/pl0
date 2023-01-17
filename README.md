@@ -18,7 +18,7 @@ block = [ "const" ident "=" number {"," ident "=" number} ";"]
         { "procedure" ident ";" block ";" } statement ;
 
 statement = [ ident ":=" expression | "call" ident 
-              | "?" ident | "!" expression 
+              | "?" ident | "!" expression | "readchar" ident | "echo" expression
               | "begin" statement {";" statement } "end" 
               | "if" condition "then" statement 
               | "while" condition "do" statement ];
@@ -32,7 +32,7 @@ term = factor {("*"|"/") factor};
 
 factor = ident | number | "(" expression ")";
 ```
-
+All keywords are **case insensitive**, but identifiers are **case sensitive**.
 This version is a bit different from the specification: it needs a `main` procedure, that will be the entry point to the program. Here is a sample:
 
 ```pascal
@@ -43,4 +43,4 @@ end;
 .
 ```
 
-Notice that it **must** end with te sequence `end; .` if the procedure has a `begin statement`. Alternatively to `?` and `!` for I/O, `read` and `write` can be used.
+Notice that it **must** end with te sequence `end; .` if the procedure has a `begin statement`. Alternatively to `?` and `!` for I/O, `read` and `readchar` can be used instead to read integers and characters respectively. `write` and `writechar` can be used as well to output.
