@@ -24,9 +24,6 @@ mod lexer {
         CEquals,
         Question,
         Bang,
-        WriteChar,
-        ReadChar,
-        Into,
         Hash,
         Less,
         LessEq,
@@ -53,8 +50,8 @@ mod lexer {
 
     impl Token {
         fn from_str(input: &str) -> Token {
-            let lowercase = input.to_lowercase();
-            match lowercase.as_str() {
+            let input = input.to_lowercase();
+            match input.as_str() {
                 "."=> Token::Point,
                 ","=> Token::Comma,
                 ";"=> Token::Semic,
@@ -65,11 +62,7 @@ mod lexer {
                 "?"=> Token::Question,
                 "read"=> Token::Question,
                 "!"=> Token::Bang,
-                "write" => Token::Bang,
-                "echo" => Token::WriteChar,
-                "writechar" => Token::WriteChar,
-                "readchar" => Token::ReadChar,
-                "into" => Token::Into,
+                "write"=> Token::Bang,
                 "#"=> Token::Hash,
                 "<"=> Token::Less,
                 "<="=> Token::LessEq,
@@ -245,9 +238,9 @@ mod parser {
             if self.peek() == Some(target) {
                 Ok(self.pop().unwrap())
             } else {
-                let tok = format!("{:?}", self.pop());
-                let pos = self.pos.get(self.cursor());
-                Err(format!("Syntax error {:?}: expected {:?}, got {:?}", pos, target, tok))
+                let pos = self.pos[self.cursor];
+                let tok = self.pop();
+                Err(format!("Syntax error {:?}: expected {:?}, got {:?}", pos, target, tok.unwrap()))
             }
         }
 
@@ -379,7 +372,7 @@ mod parser {
     }
 
     /*statement = [ ident ":=" expression | "call" ident 
-              | "?" ident | quaero ident | "!" expression | "echo" expression //TODO: corregir README
+              | "?" ident | "!" expression 
               | "begin" statement {";" statement } "end" 
               | "if" condition "then" statement 
               | "while" condition "do" statement ];
@@ -391,8 +384,6 @@ mod parser {
             Some(Token::Call) => call(scanner, asm),
             Some(Token::Question) => input(scanner, asm),
             Some(Token::Bang) => output(scanner, asm),
-            Some(Token::WriteChar) => output_char(scanner, asm),
-            Some(Token::ReadChar) => input_char(scanner, asm),
             Some(Token::Begin) => begin(scanner, asm),
             Some(Token::If) => if_statement(scanner, asm),
             Some(Token::While) => while_statement(scanner, asm),
@@ -425,13 +416,12 @@ mod parser {
     fn input(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> {
         scanner.pop();
         let id = scanner.expect_ident()?;
-        if scanner.is_match(Token::Into) {scanner.pop();}
         let id = scanner.search(id)?;
         scanner.emit(asm, format!("push ra, sp"));
-        scanner.emit(asm, format!("jal ra, PL0_INPUT.int"));
+        scanner.emit(asm, format!("jal ra, PL0_INPUT"));
+        scanner.emit(asm, format!("ssw {A}, {id}, {T}"));
         scanner.emit(asm, format!("pop ra, sp"));
         scanner.emit(asm, format!("mv {A}, a0"));
-        scanner.emit(asm, format!("ssw {A}, {id}, {T}"));
         Ok(())
     }
 
@@ -442,26 +432,6 @@ mod parser {
         scanner.emit(asm, format!("push ra, sp"));
         scanner.emit(asm, format!("jal ra, PL0_OUTPUT"));
         scanner.emit(asm, format!("pop ra, sp"));
-        Ok(())
-    }
-
-    fn output_char(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> {
-        scanner.pop();
-        expression(scanner, asm)?;
-        scanner.emit(asm, format!("sbd {A}, T_TX(zero)"));
-        Ok(())
-    }
-
-    fn input_char(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> {
-        scanner.pop();
-        let id = scanner.expect_ident()?;
-        let id = scanner.search(id)?;
-        if scanner.is_match(Token::Into) { scanner.pop(); }
-        scanner.emit(asm, format!("push ra, sp"));
-        scanner.emit(asm, format!("jal ra, PL0_INPUT.char"));
-        scanner.emit(asm, format!("pop ra, sp"));
-        scanner.emit(asm, format!("mv {A}, a0"));
-        scanner.emit(asm, format!("ssw {A}, {id}, {T}"));
         Ok(())
     }
 
@@ -679,7 +649,7 @@ fn main() -> io::Result<()> {
         let scope: Vec<&str> = scope.split(".").collect();
         scope.len()
     });
-    let mut var_table = vec!["global:".to_owned()];
+    let mut var_table = vec![];
     let mut current_scope = String::new();
     let mut nesting = 0;
     for (scope, name) in variables {
@@ -718,9 +688,7 @@ fn main() -> io::Result<()> {
     println!("; section DATA --------");
     println!("\t#align 32");
     println!("; varialbes -------");
-    println!("global:");
     for line in var_table {
-        if line == "global:".to_owned() { continue }
         println!("{}", line);
     }
     println!("; ----------------");
@@ -728,12 +696,7 @@ fn main() -> io::Result<()> {
     println!("\t\t#res 1024");
     println!("\t\t#align 32");
     println!("\t.stack:");
-    println!("\t\t#res 10");
-    println!("\t\t#align 32");
     println!("\t.out_buff:");
-    println!("\t\t#res 10");
-    println!("\t\t#align 32");
-    println!("\t.in_buff:");
     println!("\t\t#res 10");
     println!("\t\t#align 32");
 
