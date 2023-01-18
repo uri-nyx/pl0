@@ -1,0 +1,25 @@
+// Testing nested procedures
+
+procedure level0;
+    procedure level1;
+    forward level2a;
+    procedure level2b;
+        begin
+            call level2a;
+        end;
+
+    procedure level2a;
+        begin
+            writeStr 'In level 2a\n';
+        end;
+    begin;
+        call level2b;
+    end;
+begin
+    call level1
+end;
+
+procedure main;
+begin
+    call level0;
+end.

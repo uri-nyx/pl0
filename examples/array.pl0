@@ -1,0 +1,27 @@
+// Some examples on arrays
+
+procedure main;
+const s_size = 3, NL = 10;
+var s1 size s_size, s2 size 6, i;
+begin
+    s1[0] := 1;
+    s1[1] := 2;
+    s1[2] := 3;
+    i := 0;
+
+    while i < s_size do begin
+        write s1[i];
+        echo NL;
+        i := i + 1;
+    end;
+
+    s2[0] := 72;
+    s2[1] := 101;
+    s2[2] := 108;
+    s2[3] := 108;
+    s2[4] := 111;
+
+    writeStr s2;
+    writeStr ' World!\n';
+end;
+.

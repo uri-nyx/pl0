@@ -1,7 +1,7 @@
 use std::io;
 use std::io::Read;
 use std::process;
-
+//TODO: change comments to Pascal Like?`{}`
 
 fn abort(msg: &str) {
     eprintln!("{}", msg);
@@ -13,20 +13,20 @@ mod lexer {
     // The lexer categorizes a program into tokens
     // and feeds them to the parser
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Clone)]
     pub enum Token {
+        // DELIMITERS
         Point,
         Comma,
         Semic,
         LParen,
         RParen,
+        LBrack,
+        RBrack,
+
+        // OPERATORS
         Equals,
         CEquals,
-        Question,
-        Bang,
-        WriteChar,
-        ReadChar,
-        Into,
         Hash,
         Less,
         LessEq,
@@ -36,9 +36,21 @@ mod lexer {
         Minus,
         Times,
         Slash,
+        Odd,
+
+        // IO
+        Question,
+        Bang,
+        WriteChar,
+        ReadChar,
+        WriteStr,
+        Into,
+
+        // KEYWORDS
         Const,
         Var,
         Procedure,
+        Forward,
         Call,
         Begin,
         End,
@@ -46,7 +58,9 @@ mod lexer {
         Then,
         While,
         Do,
-        Odd,
+        Size,
+        Str(String),
+
         Number{val: i32},
         Ident{val: String}
     }
@@ -60,8 +74,8 @@ mod lexer {
                 ";"=> Token::Semic,
                 "("=> Token::LParen,
                 ")"=> Token::RParen,
-                "="=> Token::Equals,
-                ":="=> Token::CEquals,
+                "["=> Token::LBrack,
+                "]"=> Token::RBrack,
                 "?"=> Token::Question,
                 "read"=> Token::Question,
                 "!"=> Token::Bang,
@@ -69,7 +83,11 @@ mod lexer {
                 "echo" => Token::WriteChar,
                 "writechar" => Token::WriteChar,
                 "readchar" => Token::ReadChar,
+                "writestr" => Token::WriteStr,
                 "into" => Token::Into,
+                "odd"=> Token::Odd,
+                "="=> Token::Equals,
+                ":="=> Token::CEquals,
                 "#"=> Token::Hash,
                 "<"=> Token::Less,
                 "<="=> Token::LessEq,
@@ -82,6 +100,7 @@ mod lexer {
                 "const"=> Token::Const,
                 "var"=> Token::Var,
                 "procedure"=> Token::Procedure,
+                "forward" => Token::Forward,
                 "call"=> Token::Call,
                 "begin"=> Token::Begin,
                 "end"=> Token::End,
@@ -89,7 +108,7 @@ mod lexer {
                 "then"=> Token::Then,
                 "while"=> Token::While,
                 "do"=> Token::Do,
-                "odd"=> Token::Odd,
+                "size"=> Token::Size,
                 _ => match input.parse::<i32>() {
                     Ok(n) => Token::Number{val: n},
                     Err(_) => Token::Ident{val: input.to_string()}
@@ -100,9 +119,27 @@ mod lexer {
 
     pub fn tokenize(source: String) -> Vec<(Token, usize, usize)> {
         let mut tokens: Vec<(Token, usize, usize)> = Vec::new();
-        let symbols = [".", ",", ";","(",")","?","!","#","+","-","*","/","=","<",">"];
-
+        let symbols = [".", ",", ";","(",")","?","!","#","+","-","*","/","=","<",">", "[", "]"];
         let mut source = source;
+        let mut strings = vec![];
+        let mut current = String::new();
+        let mut recording = false;
+        for c in source.chars() {
+            if c == '\'' {
+                if recording {
+                    strings.push(current);
+                    current = String::new();
+                }
+                recording = !recording;
+            } else if recording {
+                current.push(c);
+            }
+        }
+
+        for (i, string) in strings.iter().enumerate() {
+            source = source.replace(&format!("'{string}'"), &format!("___pl0__reserved__identifier__string__{i}"));
+        }
+
         for symbol in symbols.iter() {
             source = source.replace(symbol, &format!(" {symbol} "));
         }
@@ -121,7 +158,24 @@ mod lexer {
             }
         }
 
-        return tokens
+        let mut final_tokens = vec![];
+        for tok in &tokens {
+            match &tok.0 {
+                Token::Ident { val } => {
+                    if val.contains("___pl0__reserved__identifier__string__") {
+                        let i = val.split("___pl0__reserved__identifier__string__").last().unwrap();
+                        let i = i.parse::<usize>().unwrap();
+                        let string = strings[i].clone();
+                        final_tokens.push((Token::Str(string), tok.1, tok.2));
+                    } else {
+                        final_tokens.push((tok.0.clone(), tok.1, tok.2))
+                    }
+                },
+                _ => final_tokens.push((tok.0.clone(), tok.1, tok.2))
+            }
+        }
+
+        return final_tokens
     }
 }
 
@@ -135,6 +189,7 @@ mod parser {
         tokens: Vec<Token>,
         pos: Vec<(usize, usize)>,
         constants: Vec<String>,
+        arrays: Vec<String>,
         local_constants: usize,
         pub scope_name: String,
         pub scope: Vec<String>,
@@ -156,11 +211,20 @@ mod parser {
                 tokens: tokens_only,
                 pos,
                 constants: vec![],
+                arrays: vec![],
                 local_constants: 0,
                 scope_name: "global".to_string(),
                 scope: vec![],
                 indentation
             }
+        }
+
+        pub fn is_array(&self, id: String) -> Result<(), String> {
+            if !self.arrays.contains(&id) {
+                return Err(format!("Error {:?}: {id} is not an array", self.pos[self.cursor()]));
+            }
+
+            Ok(())
         }
 
         pub fn search(&self, id: String) -> Result<String, String> {
@@ -288,10 +352,12 @@ mod parser {
 
     fn program(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> {
         block(scanner, asm)?;
-        scanner.expect(&Token::Point)?;
-
+        
         if !scanner.is_done() {
-            return Err(format!("Tokens after '.' (POINT)"));
+            scanner.expect(&Token::Point)?;
+            if !scanner.is_done() {
+                return Err(format!("Tokens after '.' (POINT)"));
+            }
         }
 
         Ok(())
@@ -299,6 +365,7 @@ mod parser {
 
     /* block = [ "const" ident "=" number {"," ident "=" number} ";"]
         [ "var" ident {"," ident} ";"]
+        { "forward" ident ";" }
         { "procedure" ident ";" block ";" } statement ; */
 
     fn block(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> {
@@ -309,6 +376,10 @@ mod parser {
         
         if scanner.is_match(Token::Var) {
             variable(scanner, asm)?;
+        }
+
+        while scanner.is_match(Token::Forward) {
+            forward(scanner)?;
         }
 
         while scanner.is_match(Token::Procedure) {
@@ -342,9 +413,31 @@ mod parser {
     fn variable(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> {
         scanner.pop();
         let id = scanner.expect_ident()?;
-        scanner.scope.push(format!("{}.{}", scanner.scope_name, id.clone()));
+        let qualified_id = format!("{}.{}", scanner.scope_name, id.clone());
+        scanner.scope.push(qualified_id.clone());
         let id = format!("{n}{id}", n = ".".repeat(scanner.nesting));
-        scanner.emit(asm, format!("#[pragma(var)] {scope}; {id}: #res 4", scope = scanner.scope_name));
+
+        if scanner.is_match(Token::Size) {
+            scanner.pop();
+            match scanner.peek() {
+                Some(Token::Ident{..}) => {
+                let constant = scanner.expect_ident()?;
+                let size = scanner.search_const(constant)?.replace("global.", "");
+                scanner.emit(asm, format!("#[pragma(var)] {scope}; {id}: #res {size} * 4", scope = scanner.scope_name));
+                scanner.emit(asm, format!("#[pragma(var)] {scope}; ..len: #d32 {size}`32", scope = scanner.scope_name));
+                }
+                _ => {
+                let size = scanner.expect_num()?;
+                if size < 1 { return Err(format!("Error defining array: {id} ({:?}): Array size must be greater than 0", scanner.pos))}
+                scanner.emit(asm, format!("#[pragma(var)] {scope}; {id}: #res {size} * 4 ", scope = scanner.scope_name));
+                scanner.emit(asm, format!("#[pragma(var)] {scope}; ..len: #d32 {size}", scope = scanner.scope_name));
+                }
+            }
+        scanner.arrays.push(qualified_id);
+        } else {
+            scanner.emit(asm, format!("#[pragma(var)] {scope}; {id}: #res 4", scope = scanner.scope_name));
+        }
+
         if scanner.is_match(Token::Comma) {
             variable(scanner, asm)?;
         } else if scanner.is_match(Token::Semic) {
@@ -353,6 +446,15 @@ mod parser {
             scanner.expect(&Token::Semic)?;
         }
 
+        Ok(())
+    }
+
+    fn forward(scanner: &mut Scanner) -> Result<(), String> {
+        scanner.pop();
+        let id = scanner.expect_ident()?;
+        let qualified_id = format!("{}.{}", scanner.scope_name, id.clone());
+        scanner.scope.push(qualified_id);
+        scanner.expect(&Token::Semic)?;
         Ok(())
     }
 
@@ -369,7 +471,11 @@ mod parser {
 
         block(scanner, asm)?;
 
-        scanner.expect(&Token::Semic)?;
+        if scanner.cursor() + 1 == scanner.tokens.len() { 
+            scanner.expect(&Token::Point)?; 
+        } else {
+            scanner.expect(&Token::Semic)?;
+        }
 
         //scanner.emit(asm, format!("pop ra, sp")); // Must be already in RA
         scanner.emit(asm, format!("jalr zero, 0(ra)"));
@@ -396,6 +502,7 @@ mod parser {
             Some(Token::Begin) => begin(scanner, asm),
             Some(Token::If) => if_statement(scanner, asm),
             Some(Token::While) => while_statement(scanner, asm),
+            Some(Token::WriteStr) => output_string(scanner, asm),
             _ => return Ok(())
         }
     }
@@ -403,12 +510,28 @@ mod parser {
     fn assignement(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> {
         let id = scanner.expect_ident()?;
         let id = scanner.search(id)?;
-        scanner.expect(&Token::CEquals)?;
-        expression(scanner, asm)?;
+
         if scanner.constants.contains(&id) {
             return Err(format!("Error {:?}: Cannot assign value to constant", scanner.pos[scanner.cursor()]));
         }
-        scanner.emit(asm, format!("ssw {A}, {id}, {T}"));
+
+        if scanner.is_match(Token::LBrack) {
+            scanner.is_array(id.clone())?;
+            scanner.pop();
+            expression(scanner, asm)?;
+            scanner.expect(&Token::RBrack)?;
+            scanner.expect(&Token::CEquals)?;
+            scanner.emit(asm, format!("la {T}, {id}"));
+            scanner.emit(asm, format!("muli {A}, {A}, 4"));
+            scanner.emit(asm, format!("add {T}, {A}, {T}"));
+            expression(scanner, asm)?;
+            scanner.emit(asm, format!("sw {A}, 0({T})"));
+            
+        } else {
+            scanner.expect(&Token::CEquals)?;
+            expression(scanner, asm)?;
+            scanner.emit(asm, format!("ssw {A}, {id}, {T}"));
+        }
         Ok(())
     }
 
@@ -449,6 +572,38 @@ mod parser {
         scanner.pop();
         expression(scanner, asm)?;
         scanner.emit(asm, format!("sbd {A}, T_TX(zero)"));
+        Ok(())
+    }
+
+    fn output_string(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> { //TODO: make strigns be of 8 bits instead of 32
+        scanner.pop();
+        match scanner.peek() {
+            Some(&Token::Ident{..}) => {
+                let id = scanner.expect_ident()?;
+                let id = scanner.search(id)?;
+                scanner.is_array(id.clone())?;
+                scanner.emit(asm, format!("la {A}, {id}"));
+                scanner.emit(asm, format!("llw {B}, {id}.len"));
+                scanner.emit(asm, format!("muli {B}, {B}, 4"));
+                scanner.emit(asm, format!("add {B}, {B}, {A}"));
+                scanner.emit(asm, format!("{n}.writeStr_loop:", n=".".repeat(scanner.nesting)));
+                scanner.emit(asm, format!("lw {T}, 0({A})"));
+                scanner.emit(asm, format!("sbd {T}, T_TX(zero)"));
+                scanner.emit(asm, format!("addi {A}, {A}, 4"));
+                scanner.emit(asm, format!("bne {A}, {B}, {n}.writeStr_loop", n=".".repeat(scanner.nesting)));
+            }
+            Some(&Token::Str(ref s)) => {
+                let s = s.clone();
+                scanner.pop();
+                let str_id = format!("str_{}_{}", scanner.pos[scanner.cursor()].0, scanner.pos[scanner.cursor()].1);
+                scanner.emit(asm, format!("#[pragma(string_litteral)]\t{str_id}: #d \"{s}\\0\"\n#align 32"));
+                scanner.emit(asm, format!("push ra, sp"));
+                scanner.emit(asm, format!("la a0, {str_id}"));
+                scanner.emit(asm, format!("jal ra, crt0.puts"));
+                scanner.emit(asm, format!("pop ra, sp"));
+            }
+            _ => return Err(format!("Syntax Error ({:?}): WriteStr takes either a string or an array", scanner.pos[scanner.cursor()])),
+        }
         Ok(())
     }
 
@@ -612,7 +767,19 @@ mod parser {
             Some(Token::Ident{..}) => {
                 let id = scanner.expect_ident()?;
                 match scanner.search(id.clone()) {
-                    Ok(id) => scanner.emit(asm, format!("llw {A}, {id}")),
+                    Ok(id) => {
+                        if scanner.is_match(Token::LBrack) {
+                            scanner.is_array(id.clone())?;
+                            scanner.pop();
+                            expression(scanner, asm)?;
+                            scanner.expect(&Token::RBrack)?;
+                            scanner.emit(asm, format!("muli {A}, {A}, 4"));
+                            scanner.emit(asm, format!("la {T}, {id}"));
+                            scanner.emit(asm, format!("add {T}, {A}, {T}"));
+                            scanner.emit(asm, format!("lw {A}, 0({T})"));
+                        }
+                        else { scanner.emit(asm, format!("llw {A}, {id}")) }
+                        }
                     Err(_) => {
                         let id = scanner.search_const(id)?.replace("global.", "");
                         scanner.emit(asm, format!("li {A}, {id}"))
@@ -660,9 +827,12 @@ fn main() -> io::Result<()> {
 
     let mut text = vec![];
     let mut data = vec![];
+    let mut string_litterals = vec![];
     for line in compiled {
         if line.contains("#[pragma(var)]") {
             data.push(line.replace("#[pragma(var)]", ""));
+        } else if line.contains("#[pragma(string_litteral)]") {
+            string_litterals.push(line.replace("#[pragma(string_litteral)]", ""));
         } else {
             text.push(line);
         }
@@ -716,14 +886,17 @@ fn main() -> io::Result<()> {
     println!("\tj crt0.exit");
     println!("");
     println!("; section DATA --------");
-    println!("\t#align 32");
-    println!("; varialbes -------");
+    println!("; String Litterals-----");
+    for line in string_litterals {
+        println!("{}", line);
+    }
+    println!("; Variables -----------");
     println!("global:");
     for line in var_table {
         if line == "global:".to_owned() { continue }
         println!("{}", line);
     }
-    println!("; ----------------");
+    println!("; ---------------------");
     println!("\t\t#align 32");
     println!("\t\t#res 1024");
     println!("\t\t#align 32");

@@ -1,0 +1,19 @@
+// Testing forward references
+forward B;
+procedure A;
+begin
+    call B;
+    writeStr 'A\n';
+    
+end;
+
+procedure B;
+begin
+    writeStr 'B';
+end;
+
+procedure main;
+begin
+    call A;
+end;
+.

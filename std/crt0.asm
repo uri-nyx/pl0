@@ -1,6 +1,5 @@
 #include "master.asm"
 #include "sys.asm"
-
 # addr 0
 crt0:
     li  a0, le(0b1_1_0_010_111110_11111111_000000000000)

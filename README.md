@@ -2,7 +2,7 @@
 
 This is a tiny project-exercise about parsers, compilers and interpreters. It implements a simple descent recursive parser and a compiler for the teaching programming language [https://en.wikipedia.org/wiki/PL/0](PL/0). It emits assembly code directly while parsing for a fantasy computer, the [https://github.com/uri-nyx/ultima](Taleä Computer System). It is highly unoptimized, but it works!
 
-A version for a somewhat *standard* PL/0 compiler can be found in the *standard* branch. This version implements extra features (arrays and strings) to allow self-hosting, as described by [https://briancallahan.net/blog/20210822.html](Brian Callahan), and implements a self hosted PL/0 for the Taleä Computer System (Just adding another backend to [](Brian's compiler)).
+A version for a somewhat *standard* PL/0 compiler can be found in the *standard* branch. This version implements extra features (arrays and strings) to allow self-hosting, as described by [https://briancallahan.net/blog/20210822.html](Brian Callahan), and implements a self hosted PL/0 for the Taleä Computer System (Just adding another backend to [https://github.com/ibara/pl0c](Brian's compiler)).
 
 It takes the input from `stdin`, and prints it to `stdout`, but is easily redirectable to files. To assemble, use [https://github.com/hlorenzi/customasm](customasm) (though I am currently using the fork by [https://github.com/JosephAbbey/customasm](Joseph Abbey), it **won't assemble with the original**).
 
@@ -37,9 +37,12 @@ expression = [ "+"|"-"] term { ("+"|"-") term};
 term = factor {("*"|"/") factor};
 
 factor = ident | number | "(" expression ")";
-input_int = "read" | "?"
-output_int = "write" | "!"
-output_char = "writechar" | "echo"
+
+input_int = "read" | "?";
+
+output_int = "write" | "!";
+
+output_char = "writechar" | "echo";
 ```
 
 All keywords are **case insensitive**, but identifiers are **case sensitive**.
@@ -53,4 +56,4 @@ end;
 .
 ```
 
-Notice that it **must** end with te sequence `end; .` if the procedure has a `begin statement`. Alternatively to `?` and `!` for I/O, `read` and `readchar` can be used instead to read integers and characters respectively. `write` and `writechar` can be used as well to output.
+Notice that it **must** end with te sequence `end; .` if the procedure has a `begin statement`. Alternatively to `?` and `!` for I/O, `read` and `readchar` can be used instead to read integers and characters respectively. `write` and `writechar` can be used as well to output. Comments are introduced by `//` and last until the end of the line.
