@@ -1,0 +1,36 @@
+procedure hello;
+  var i, x;
+begin
+  i := 0;
+  x := 72;
+  writeChar x;
+  x := x + 29;
+  writeChar x;
+  x := x + 7;
+  while i < 2 do
+  begin
+    writeChar x;
+    i := i + 1
+  end;
+  x := x + 3;
+  writeChar x;
+  writeChar 44;
+  writeChar 32;
+  x := x + 8;
+  writeChar x;
+  x := x - 8;
+  writeChar x;
+  x := x + 3;
+  writeChar x;
+  x := x - (3 * 2);
+  writeChar x;
+  x := x - 8;
+  writeChar x;
+  x := x / 3;
+  writeChar x;
+  writeChar 10
+end;
+
+procedure main;
+call hello;
+.

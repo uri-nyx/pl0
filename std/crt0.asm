@@ -67,28 +67,85 @@ crt0:
             #align 32
 
 PL0_INPUT:
-    la a0, .msg
-    jal ra, crt0.puts
-
-    .wait_for_input:
-        lbu a0, T_RXLEN(zero)
-        bne a0, zero, .end
-        j .wait_for_input
-
-    .end:
-        lbu a0, T_RX(zero)
+    .char:
+        la a0, .msg
+        push ra, sp
+        jal ra, crt0.puts
+        mv a0, zero ; wait for interrupt
+        ..wait: beq a0, zero, ..wait
+        lbud a0, T_RX(zero)
         pop ra, sp
         jalr zero, 0(ra)
 
-    .msg:
-        #d "pl/0> \0"
-        #align 32
+    .int:
+        la a0, .msg
+        push ra, sp
+        jal ra, crt0.puts
+        pop ra, sp
+        mv a0, zero ; wait for interrupt
+        ..wait: beq a0, zero, ..wait
 
+            
+        ..convert:                  ; number = number + (char - 0x30 * step * 10)
+            addi t5, zero, 1
+            mv a0, zero
+            ...loop:
+                lbud t1, T_RX(zero)     ; char
+                beq t1, zero, ...return ; NULL
+                mv t3, t1
+                subi t3, t3, 0x2d       ; minus sign
+                beq t3, zero, ...return.negative
+                mv t3, t1
+                subi t3, t3, 0x2b       ; plus sign
+                beq t3, zero, ...return
+                subi t1, t1, 0x30       ; digit
+                sltiu t4, t1, 10        ; is less than 10?
+                beq t4, zero, ...err    ; Error converting, expected number
+                mul zero, t1, t1, t5    ; digit * step (*10)
+                add a0, a0, t1          ; add ponderated digit to a0
+                muli t5, t5, 10
+                addi t3, t3, 1
+                j ...loop
+            
+            ...err:
+                la a0, ...msg
+                push ra, sp
+                jal ra, crt0.puts
+                pop ra, sp
+                addi a0, a0, 0x2ead
+            ...return:
+                jalr zero, 0(ra)
+                ....negative:
+                    not a0, a0
+                    addi a0, a0, 1
+                    jalr zero, 0(ra)
+
+            ...msg: #d"Error converting input, expected only numeric characters\n\0"
+            #align 32
+            
+
+    .msg: #d "pl/0> \0"
+    #align 32
+        
 PL0_OUTPUT:
-    addi t1, zero, 10
+    addi t1, zero, 11
     la t3, global.out_buff
     fill t3, t1, zero
     addi t3, t3, 10
+    addi t1, zero, 10
+
+    .check_for_sign:
+        shirl t2, a0, 31    ; sign bit
+        beq t2, zero, ..positive
+        ..negative:
+            addi t4, zero, 0x2d
+            not a0, a0      ; turn to positive
+            addi a0, a0, 1
+            j PL0_OUTPUT.loop
+        ..positive:
+            addi t4, zero, 0x2b
+
+
 
     .loop:
         idiv a0, t2, a0, t1      ; a0 /= 10, t2 = a0 % 10
@@ -99,11 +156,10 @@ PL0_OUTPUT:
         j .loop
     
     .end:
+        sbd t4, T_TX(zero)
         mv a0, t3
         push ra, sp
         jal ra, crt0.puts
-        addi a0, zero, 10
-        sbd a0, T_TX(zero)
         pop ra, sp
         jalr zero, 0(ra)
 
@@ -170,15 +226,15 @@ HANDLER_ACCESS_VIOLATION:
         #align 32
 
 HANDLER_TTY_TRANSMIT:
-    lbud a0, T_RX(zero)          ; Notice that PL/0 only can read one character
+    addi a0, a0, 1
     sysret
 
 HANDLER_KBD_CHARACTER:
-    lbud a0, K_CHARACTER(zero)   ; Notice that PL/0 only can read one character
+    ;lbud a0, K_CHARACTER(zero)   ; Notice that PL/0 does not use yet the keyboard interface
     sysret
 
 HANDLER_KBD_SCANCODE:
-    lbud a0, K_CODE(zero)    ; Notice that PL/0 only can read one character
+    lbud a0, K_CODE(zero)    ; Notice that PL/0 does not use yet the keyboard interface
     sysret
 
 HANDLER_TPS_LOAD_FINISHED:

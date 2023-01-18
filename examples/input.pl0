@@ -1,0 +1,14 @@
+procedure main;
+const NL = 10;
+var char, int;
+begin
+    int := -1;
+    char := 0;
+    read int; 
+    readchar char;
+    write int;
+    echo NL;
+    echo char;
+    echo NL;
+end;
+.
