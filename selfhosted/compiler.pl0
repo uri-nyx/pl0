@@ -1,0 +1,115 @@
+{
+  pl0c -- PL/0 compiler written in PL/0.
+  Source adapted for the Taleä Computer System
+  Original by Brian Callahan
+  Copyright (c) 2021 Brian Callahan <bcallah@openbsd.org>
+}
+
+const
+  CHECK_LHS	= 0,
+  CHECK_RHS	= 1,
+  CHECK_CALL	= 2,
+
+  TOK_IDENT	= 'I',
+  TOK_NUMBER	= 'N',
+  TOK_CONST	= 'C',
+  TOK_VAR	= 'V',
+  TOK_PROCEDURE	= 'P',
+  TOK_CALL	= 'c',
+  TOK_BEGIN	= 'B',
+  TOK_END	= 'E',
+  TOK_IF	= 'i',
+  TOK_THEN	= 'T',
+  TOK_ELSE	= 'e',
+  TOK_WHILE	= 'W',
+  TOK_DO	= 'D',
+  TOK_ODD	= 'O',
+  TOK_WRITEINT	= 'w',
+  TOK_WRITECHAR	= 'H',
+  TOK_WRITESTR	= 'S',
+  TOK_READINT	= 'R',
+  TOK_READCHAR	= 'h',
+  TOK_INTO	= 'n',
+  TOK_SIZE	= 's',
+  TOK_EXIT	= 'X',
+  TOK_AND	= '&',
+  TOK_OR	= '|',
+  TOK_NOT	= '~',
+  TOK_DOT	= '.',
+  TOK_EQUAL	= '=',
+  TOK_COMMA	= ',',
+  TOK_SEMICOLON	= ';',
+  TOK_ASSIGN	= ':',
+  TOK_HASH	= '#',
+  TOK_LTHAN	= '<',
+  TOK_GTHAN	= '>',
+  TOK_LTHANE	= '{',
+  TOK_GTHANE	= '}',
+  TOK_PLUS	= '+',
+  TOK_MINUS	= '-',
+  TOK_MULTIPLY	= '*',
+  TOK_DIVIDE	= '/',
+  TOK_MODULO	= '%',
+  TOK_LPAREN	= '(',
+  TOK_RPAREN	= ')',
+  TOK_LBRACK	= '[',
+  TOK_RBRACK	= ']',
+  TOK_STRING	= '"' {"{}
+;
+
+var
+  raw size 1048576, { 8 MB, can hold files up to 1 MB in size }
+  symtab size 1048576, { 8 MB, can hold up to 30840 symbols }
+  token size 32, { 31 characters + NUL }
+  str size 32, { For cmpstr }
+  symtabcnt, { To keep track of number of symtab entries }
+  ret, { Return code for procedures that need one }
+  line { line number }
+;
+
+{ Misc. functions }
+
+procedure error;
+begin
+  writeStr 'pl0c: error: ';
+  writeInt line;
+  writeStr ': '
+end;
+
+procedure readin;
+  var ch, i;
+begin
+  i := 0;
+  readChar into ch; //Esta leyendo a 4 bytes por caracter e intentando escribir a 1
+  while ch # -1 do
+  begin
+    raw[i] := ch;
+    i := i + 1;
+    if i > 1048576 then { File too big! }
+    begin
+      call error;
+      writeStr 'file too big\n';
+      exit 1
+    end;
+    readChar into ch
+  end;
+  raw[i] := 0;
+end;
+
+{ Lexer }
+
+{ Code generator }
+
+{ Parser }
+
+procedure parse;
+begin
+  writeStr raw;
+end;
+
+{ Main }
+procedure main;
+begin
+  call readin;
+  call parse
+end.

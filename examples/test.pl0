@@ -1,0 +1,17 @@
+var a, b, c;
+
+procedure First;
+var f, g size 3;
+begin
+
+end;
+
+procedure Second;
+var h, i size 20;
+begin
+
+end;
+
+procedure main;
+begin
+end.

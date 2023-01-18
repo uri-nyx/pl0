@@ -1,5 +1,5 @@
 // Test local scoping
-
+const NL = 10;
 var x;
 procedure a;
 var x;
@@ -12,6 +12,7 @@ procedure main;
 begin
     x := 10;
     call a;
+    echo NL;
     ! x
 end;
 .

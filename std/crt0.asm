@@ -57,23 +57,30 @@ crt0:
                 jalr zero, 0(ra)
 
     .exit:
+        push a0, sp
         la a0, ..msg
         jal ra, .puts
+        pop a0, sp
+        jal ra, PL0_OUTPUT
+        addi a0, zero, 10
+        sbd a0, T_TX(zero)
         ..halt:
         j ..halt
         ..msg:
-            #d "Execution Terminated. ^C to close the emulator.\0"
+            #d "Execution Terminated with exit code: \0"
             #align 32
 
 PL0_INPUT:
     .char:
+        lbud a0, T_RXLEN(zero) ; check first serial buffer
+        bne a0, zero, ..load_byte 
+        mv a0, zero ; wait for interrupt if the buffer was empty
         la a0, .msg
         push ra, sp
-        jal ra, crt0.puts
-        mv a0, zero ; wait for interrupt
-        ..wait: beq a0, zero, ..wait
-        lbud a0, T_RX(zero)
+        jal ra, crt0.puts  ; print a prompt
         pop ra, sp
+        ..wait: beq a0, zero, ..wait
+        ..load_byte: lbud a0, T_RX(zero)
         jalr zero, 0(ra)
 
     .int:
@@ -142,7 +149,8 @@ PL0_OUTPUT:
             addi a0, a0, 1
             j PL0_OUTPUT.loop
         ..positive:
-            addi t4, zero, 0x2b
+            mv t4, zero  ; don`t print a '+' in positive numbers
+            ;addi t4, zero, 0x2b
 
 
 

@@ -20,6 +20,7 @@ begin
     s2[2] := 108;
     s2[3] := 108;
     s2[4] := 111;
+    s2[5] := 0;
 
     writeStr s2;
     writeStr ' World!\n';

@@ -37,6 +37,10 @@ mod lexer {
         Times,
         Slash,
         Odd,
+        Not,
+        And,
+        Or,
+        Mod,
 
         // IO
         Question,
@@ -56,9 +60,11 @@ mod lexer {
         End,
         If,
         Then,
+        Else,
         While,
         Do,
         Size,
+        Exit,
         Str(String),
 
         Number{val: i32},
@@ -80,6 +86,7 @@ mod lexer {
                 "read"=> Token::Question,
                 "!"=> Token::Bang,
                 "write" => Token::Bang,
+                "writeint" => Token::Bang,
                 "echo" => Token::WriteChar,
                 "writechar" => Token::WriteChar,
                 "readchar" => Token::ReadChar,
@@ -89,6 +96,7 @@ mod lexer {
                 "="=> Token::Equals,
                 ":="=> Token::CEquals,
                 "#"=> Token::Hash,
+                "<>" => Token::Hash,
                 "<"=> Token::Less,
                 "<="=> Token::LessEq,
                 ">"=> Token::Great,
@@ -97,6 +105,11 @@ mod lexer {
                 "-"=> Token::Minus,
                 "*"=> Token::Times,
                 "/"=> Token::Slash,
+                "exit" => Token::Exit,
+                "not" => Token::Not,
+                "and" => Token::And,
+                "or" => Token::Or,
+                "mod" => Token::Mod,
                 "const"=> Token::Const,
                 "var"=> Token::Var,
                 "procedure"=> Token::Procedure,
@@ -106,6 +119,7 @@ mod lexer {
                 "end"=> Token::End,
                 "if"=> Token::If,
                 "then"=> Token::Then,
+                "else"=> Token::Else,
                 "while"=> Token::While,
                 "do"=> Token::Do,
                 "size"=> Token::Size,
@@ -119,7 +133,7 @@ mod lexer {
 
     pub fn tokenize(source: String) -> Vec<(Token, usize, usize)> {
         let mut tokens: Vec<(Token, usize, usize)> = Vec::new();
-        let symbols = [".", ",", ";","(",")","?","!","#","+","-","*","/","=","<",">", "[", "]"];
+        let symbols = [".", ",", ";","(",")","?","!","#","+","-","*","/","=","<",">", "[", "]", "{", "}"];
         let mut source = source;
         let mut strings = vec![];
         let mut current = String::new();
@@ -143,18 +157,35 @@ mod lexer {
         for symbol in symbols.iter() {
             source = source.replace(symbol, &format!(" {symbol} "));
         }
-        for symbol in [">  =","<  =",": =", "/  /"].iter() {
+        for symbol in [">  =","<  =",": =", "/  /", "<  >"].iter() {
             let first = symbol.chars().nth(0).unwrap();
             let last = symbol.chars().last().unwrap();
             source = source.replace(symbol, &format!("{first}{last}"));
         }
 
+        let mut is_comment = false;
         for (lineno, line) in source.lines().enumerate() {
             let mut col = 0;
             for word in line.split_whitespace() {
-                if word == "//" { break } // Skip comments
-                tokens.push((Token::from_str(word), lineno + 1, col)); // start lines from 1
-                col += word.len()
+                match word {
+                    "//" => break, // Skip line comments
+                    "{"  => {
+                            is_comment = true;
+                            col += 1;
+                    }
+                    "}"  => {
+                        is_comment = false;
+                        col += 1;
+                    }
+                    _ => {
+                        if !is_comment {
+                            tokens.push((Token::from_str(word), lineno + 1, col)); // start lines from 1
+                            col += word.len()
+                        } else {
+                            col += word.len()
+                        }
+                    }
+                }
             }
         }
 
@@ -369,7 +400,7 @@ mod parser {
         { "procedure" ident ";" block ";" } statement ; */
 
     fn block(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> {
-
+        scanner.local_constants = 0;
         if scanner.is_match(Token::Const) { 
             constant(scanner, asm)?; 
         }
@@ -391,12 +422,39 @@ mod parser {
         Ok(())
     }
 
+    fn constant_val(scanner: &mut Scanner) -> Result<i32, String> {
+        let tok = scanner.peek().clone();
+        match tok {
+            Some(&Token::Number{..}) => Ok(scanner.expect_num()?),
+            Some(&Token::Str(ref s)) => {
+                let s = s.to_owned();
+                if s.len() == 1 {
+                    scanner.pop();
+                    Ok(s.as_bytes()[0] as i32)
+                } else {
+                    return Err(format!("Constant Error {:?}: Constants can only take one character strings, got {s}", scanner.pos[scanner.cursor()]))
+                }
+            }
+            tok => return Err(format!("Constant Error {:?}: Constants can only be declared with, a number or a character, {:?}", scanner.pos[scanner.cursor()], tok))
+        }
+    }
+
     fn constant(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> {
         scanner.local_constants += 1;
         scanner.pop();
         let id = scanner.expect_ident()?;
         scanner.expect(&Token::Equals)?;
-        let val = scanner.expect_num()?;
+        let val = constant_val(scanner)?;
+
+        /*if val.is_none() { //TODO: implement simple arithmetic in constants. Otherwhise this adds no value
+            let id = scanner.expect_ident();
+            if !id.is_err() {
+                let id = scanner.search_const(id)?;
+            } else {
+                return Err(format!("Constant Error {:?}: Constants can only be declared with constants, number or character", scanner.pos[scanner.cursor()]))
+            }
+        }*/
+
         scanner.emit(asm, format!("{n}{id} = {val}", n = ".".repeat(scanner.nesting)));
         scanner.constants.push(format!("{}.{}", scanner.scope_name, id));
 
@@ -424,13 +482,13 @@ mod parser {
                 let constant = scanner.expect_ident()?;
                 let size = scanner.search_const(constant)?.replace("global.", "");
                 scanner.emit(asm, format!("#[pragma(var)] {scope}; {id}: #res {size} * 4", scope = scanner.scope_name));
-                scanner.emit(asm, format!("#[pragma(var)] {scope}; ..len: #d32 {size}`32", scope = scanner.scope_name));
+                scanner.emit(asm, format!("#[pragma(var)] {scope}; {n}.len: #d32 {size}`32", scope = scanner.scope_name, n=".".repeat(scanner.nesting)));
                 }
                 _ => {
                 let size = scanner.expect_num()?;
                 if size < 1 { return Err(format!("Error defining array: {id} ({:?}): Array size must be greater than 0", scanner.pos))}
                 scanner.emit(asm, format!("#[pragma(var)] {scope}; {id}: #res {size} * 4 ", scope = scanner.scope_name));
-                scanner.emit(asm, format!("#[pragma(var)] {scope}; ..len: #d32 {size}", scope = scanner.scope_name));
+                scanner.emit(asm, format!("#[pragma(var)] {scope}; {n}.len: #d32 {size}`32", scope = scanner.scope_name, n=".".repeat(scanner.nesting)));
                 }
             }
         scanner.arrays.push(qualified_id);
@@ -462,6 +520,7 @@ mod parser {
         scanner.pop();
         let id = scanner.expect_ident()?;
         let qualified_id = format!("{}.{}", scanner.scope_name, id.clone());
+        let old_scope = scanner.scope_name.clone();
         scanner.scope_name = qualified_id.clone();
         scanner.scope.push(scanner.scope_name.clone());
         let id = format!("{n}{id}", n = ".".repeat(scanner.nesting));
@@ -481,6 +540,7 @@ mod parser {
         scanner.emit(asm, format!("jalr zero, 0(ra)"));
         scanner.nesting -= 1;
         scanner.scope_drop(qualified_id);
+        scanner.scope_name = old_scope;
         Ok(())
     }
 
@@ -503,6 +563,7 @@ mod parser {
             Some(Token::If) => if_statement(scanner, asm),
             Some(Token::While) => while_statement(scanner, asm),
             Some(Token::WriteStr) => output_string(scanner, asm),
+            Some(Token::Exit) => exit_statement(scanner, asm),
             _ => return Ok(())
         }
     }
@@ -547,8 +608,8 @@ mod parser {
 
     fn input(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> {
         scanner.pop();
-        let id = scanner.expect_ident()?;
         if scanner.is_match(Token::Into) {scanner.pop();}
+        let id = scanner.expect_ident()?;
         let id = scanner.search(id)?;
         scanner.emit(asm, format!("push ra, sp"));
         scanner.emit(asm, format!("jal ra, PL0_INPUT.int"));
@@ -578,25 +639,24 @@ mod parser {
     fn output_string(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> { //TODO: make strigns be of 8 bits instead of 32
         scanner.pop();
         match scanner.peek() {
-            Some(&Token::Ident{..}) => {
+            Some(&Token::Ident{..}) => { // Print until \0 even if array is larger
                 let id = scanner.expect_ident()?;
                 let id = scanner.search(id)?;
                 scanner.is_array(id.clone())?;
                 scanner.emit(asm, format!("la {A}, {id}"));
-                scanner.emit(asm, format!("llw {B}, {id}.len"));
-                scanner.emit(asm, format!("muli {B}, {B}, 4"));
-                scanner.emit(asm, format!("add {B}, {B}, {A}"));
-                scanner.emit(asm, format!("{n}.writeStr_loop:", n=".".repeat(scanner.nesting)));
+                scanner.emit(asm, format!("{n}writeStr_loop:", n=".".repeat(scanner.nesting)));
                 scanner.emit(asm, format!("lw {T}, 0({A})"));
+                scanner.emit(asm, format!("beq {T}, zero, {n}writeStr_exit", n=".".repeat(scanner.nesting)));
                 scanner.emit(asm, format!("sbd {T}, T_TX(zero)"));
                 scanner.emit(asm, format!("addi {A}, {A}, 4"));
-                scanner.emit(asm, format!("bne {A}, {B}, {n}.writeStr_loop", n=".".repeat(scanner.nesting)));
+                scanner.emit(asm, format!("j {n}writeStr_loop", n=".".repeat(scanner.nesting)));
+                scanner.emit(asm, format!("{n}writeStr_exit:", n=".".repeat(scanner.nesting)));
             }
             Some(&Token::Str(ref s)) => {
                 let s = s.clone();
                 scanner.pop();
                 let str_id = format!("str_{}_{}", scanner.pos[scanner.cursor()].0, scanner.pos[scanner.cursor()].1);
-                scanner.emit(asm, format!("#[pragma(string_litteral)]\t{str_id}: #d \"{s}\\0\"\n#align 32"));
+                scanner.emit(asm, format!("#[pragma(string_litteral)]{str_id}: #d \"{s}\\0\"\n#align 32"));
                 scanner.emit(asm, format!("push ra, sp"));
                 scanner.emit(asm, format!("la a0, {str_id}"));
                 scanner.emit(asm, format!("jal ra, crt0.puts"));
@@ -609,9 +669,9 @@ mod parser {
 
     fn input_char(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> {
         scanner.pop();
+        if scanner.is_match(Token::Into) { scanner.pop(); }
         let id = scanner.expect_ident()?;
         let id = scanner.search(id)?;
-        if scanner.is_match(Token::Into) { scanner.pop(); }
         scanner.emit(asm, format!("push ra, sp"));
         scanner.emit(asm, format!("jal ra, PL0_INPUT.char"));
         scanner.emit(asm, format!("pop ra, sp"));
@@ -639,11 +699,23 @@ mod parser {
 
     fn if_statement(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> {
         scanner.pop();
+        scanner.emit(asm, format!("{n}if:", n = ".".repeat(scanner.nesting)));
+        scanner.nesting += 1;
         condition(scanner, asm)?;
-        scanner.emit(asm, format!("beq {A}, zero, {n}false_label", n = ".".repeat(scanner.nesting)));
+        scanner.emit(asm, format!("beq {A}, zero, {n}else", n = ".".repeat(scanner.nesting - 1)));
         scanner.expect(&Token::Then)?;
         statement(scanner, asm)?;
-        scanner.emit(asm, format!("{n}false_label:", n = ".".repeat(scanner.nesting)));
+        scanner.nesting -= 1;
+        scanner.emit(asm, format!("j {n}exit", n = ".".repeat(scanner.nesting)));
+        scanner.emit(asm, format!("{n}else:", n = ".".repeat(scanner.nesting)));
+        scanner.nesting += 1;
+        if scanner.is_match(Token::Else) { 
+            scanner.pop();
+            statement(scanner, asm)? 
+        }
+        scanner.nesting -= 1;
+        scanner.emit(asm, format!("{n}exit:", n = ".".repeat(scanner.nesting)));
+
         Ok(())
     }
 
@@ -662,6 +734,14 @@ mod parser {
         scanner.nesting -= 1;
         scanner.emit(asm, format!("j {n}while", n = ".".repeat(scanner.nesting)));
         scanner.emit(asm, format!("{n}end_while:", n = ".".repeat(scanner.nesting)));
+        Ok(())
+    }
+
+    fn exit_statement(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> {
+        scanner.pop();
+        expression(scanner, asm)?;
+        scanner.emit(asm, format!("mv a0, {A}"));
+        scanner.emit(asm, format!("j crt0.exit")); //TODO: add a better exit point
         Ok(())
     }
 
@@ -702,32 +782,40 @@ mod parser {
 
     /*expression = [ "+"|"-"] term { ("+"|"-") term};*/
 
-    fn add_sub(scanner: &mut Scanner) -> Result<String, String> {
+    fn add_sub_or(scanner: &mut Scanner) -> Result<String, String> {
         let pos = scanner.pos[scanner.cursor];
         match scanner.pop().unwrap() {
             Token::Plus => Ok(format!("add {A}, {A}, {B}")),
             Token::Minus => Ok(format!("sub {A}, {B}, {A}")),
-            tok => Err(format!("Syntax Error {:?}: Expected + or -, got {:?}.", pos, tok))
+            Token::Or => Ok(format!("or {A}, {B}, {A}")),
+            tok => Err(format!("Syntax Error {:?}: Expected +, -, or 'or', got {:?}.", pos, tok))
         }
     }
 
     fn expression(scanner: &mut Scanner, asm: &mut Vec<String>) -> Result<(), String> {
-        if scanner.is_match(Token::Plus) {
-            scanner.pop();
-            term(scanner, asm)?;
-        }
-        else if scanner.is_match(Token::Minus) {
-            scanner.pop();
-            term(scanner, asm)?;
-            scanner.emit(asm, format!("not {A}, {A}")); // Maybe would be handy allow to add an immediate here
-            scanner.emit(asm, format!("addi {A}, {A}, 1"));
-        } else {
-            term(scanner, asm)?;
+
+        match scanner.peek() {
+            Some(&Token::Plus) => {
+                scanner.pop();
+                term(scanner, asm)?;
+            }
+            Some(&Token::Minus) => {
+                scanner.pop();
+                term(scanner, asm)?;
+                scanner.emit(asm, format!("not {A}, {A}")); // Maybe would be handy allow to add an immediate here
+                scanner.emit(asm, format!("addi {A}, {A}, 1"));
+            } 
+            Some(&Token::Not) => {
+                scanner.pop();
+                term(scanner, asm)?;
+                scanner.emit(asm, format!("not {A}, {A}"));
+            }
+            _ =>  term(scanner, asm)?
         }
 
-        while scanner.is_match(Token::Plus) || scanner.is_match(Token::Minus) {
+        while scanner.is_match(Token::Plus) || scanner.is_match(Token::Minus) ||  scanner.is_match(Token::Or) {
             scanner.emit(asm, format!("push {A}, sp"));
-            let expression = add_sub(scanner)?;
+            let expression = add_sub_or(scanner)?;
             term(scanner, asm)?;
             scanner.emit(asm, format!("pop {B}, sp"));
             scanner.emit(asm, expression);
@@ -738,13 +826,15 @@ mod parser {
 
     /*term = factor {("*"|"/") factor};*/
 
-    fn mul_div(scanner: &mut Scanner) -> Result<String, String> {
+    fn mul_div_mod_and(scanner: &mut Scanner) -> Result<String, String> {
         let pos = scanner.pos[scanner.cursor];
 
         match scanner.pop().unwrap() {
             Token::Times => Ok(format!("mul zero, {A}, {A}, {B}")),
             Token::Slash => Ok(format!("idiv {A}, zero, {B}, {A}")),
-            tok => Err(format!("Syntax Error {:?}: Expected * or /, got {:?}.", pos, tok))
+            Token::Mod => Ok(format!("idiv  zero, {A}, {B}, {A}")),
+            Token::And => Ok(format!("and {A}, {B}, {A}")),
+            tok => Err(format!("Syntax Error {:?}: Expected *, /, 'mod', or 'and' got {:?}.", pos, tok))
         }
     }
     
@@ -752,7 +842,7 @@ mod parser {
         factor(scanner, asm)?;
         while scanner.is_match(Token::Times) || scanner.is_match(Token::Slash) {
             scanner.emit(asm, format!("push {A}, sp"));
-            let term = mul_div(scanner)?;
+            let term = mul_div_mod_and(scanner)?;
             factor(scanner, asm)?;
             scanner.emit(asm, format!("pop {B}, sp"));
             scanner.emit(asm, term);
@@ -849,6 +939,7 @@ fn main() -> io::Result<()> {
         let scope: Vec<&str> = scope.split(".").collect();
         scope.len()
     });
+
     let mut var_table = vec!["global:".to_owned()];
     let mut current_scope = String::new();
     let mut nesting = 0;
@@ -882,13 +973,14 @@ fn main() -> io::Result<()> {
     println!("\tmv {B}, zero");
     println!("\tmv {T}, zero");
 
-    println!("\tjal ra, main");
+    println!("\tjal ra, main");//Main exits with 0 implicitly
+    println!("\tmv a0, zero"); //TODO: maybe move exit code to a system vvariable
     println!("\tj crt0.exit");
     println!("");
     println!("; section DATA --------");
     println!("; String Litterals-----");
     for line in string_litterals {
-        println!("{}", line);
+        println!("{}", line.trim());
     }
     println!("; Variables -----------");
     println!("global:");
